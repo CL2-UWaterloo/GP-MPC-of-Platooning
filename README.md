@@ -1,4 +1,4 @@
-These are companying simulation codes of the paper `Gaussian Process Learning-Based Model Predictive Control for Safe Interactions of a Platoon of Autonomous and Human-Driven Vehicles` submitted to ACC 2023. The project is actively being updated. 
+These are companying simulation codes of the [paper](https://arxiv.org/abs/2211.04665) `Gaussian Process Learning-Based Model Predictive Control for Safe Interactions of a Platoon of Autonomous and Human-Driven Vehicles` submitted to ACC 2023. The project is actively being updated. 
 
 ## ARX_simulation
 This contains the MPC with ARX model and ARX+GP as the simulation plant.
