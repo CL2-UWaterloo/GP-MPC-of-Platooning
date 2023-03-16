@@ -23,7 +23,7 @@ classdef gpCallback < casadi.Callback
     % Initialize the object
     function init(self)
       disp('initializing gpCallback')
-      gpr = load('gpr_medium.mat', 'model'); % the name of 'model' need to match the gpr model training name in "GP.m" (model = fitrgp() )
+      gpr = load('gpr_sparse.mat', 'model'); % the name of 'model' need to match the gpr model training name in "GP.m" (model = fitrgp() )
       self.model = gpr.model;
     end
 
@@ -39,3 +39,5 @@ classdef gpCallback < casadi.Callback
     end
   end
 end
+
+
