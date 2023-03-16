@@ -6,6 +6,7 @@ dt = 0.1;   % sample time
 M = 2; % No of autonomous vehicles
  
 % constraints
+% constraints, https://copradar.com/chapts/references/acceleration.html
 a_max = 5;  % max accl, Top of the line production muscle cars is 0.55 g.
 a_min = -5; % min accl, 0.7 g is the Vehicle Max, 0.47 g is the Average Driver Max
 v_max = 35;  % max vel, 126km/h
@@ -59,10 +60,10 @@ vv0_h_gp = [v0_h;zeros(TIME-1,1)]; % velocity history of HV with GP corrections
 pp0 = [p0;zeros(TIME,M)]; % position history of AVs
 pp0_h_gp = [p0_h;zeros(TIME,1)]; % position history of HV with ARX + GP
 
-MPC_cost = zeros(TIME,1); % all mpc cost JJ
+mpc_cost = zeros(TIME,1); % all mpc cost J
 
 AV_accel = zeros(N,M); % MPC acceleration output
-AV_velocities = zeros(N+1,M);
+AV_vel = zeros(N+1,M);
 
 humanvar_offset = (N)*M+(N+1)*2*M; % the first these many variables are for the AVs: N*M for accel and (N+1)*M for vel and pos each
 
@@ -81,7 +82,7 @@ while k < TIME
 %     elseif k < 5*TIME/6
 %         v_ref = 10*ones(N+1,1);
     else
-        v_ref = 20*ones(N+1,1);
+        v_ref = 10*ones(N+1,1);
     end
 
     % MPC
@@ -104,12 +105,35 @@ while k < TIME
     % for k-1 assign the current vel to v_M_m1 for the next iteration
     v_M_m1 = v0(end); % for last AV in platoon
     v_h_m1 = v0_h_gp; % v0_h_gp is the actual "measured" states from the plant
+                      % we use the arx+gp model to represent the real plant
+                      % behaviors. The model propagations must be handled
+                      % by the arx model, gp is the corrections to make
+                      % the whole system model more accurate to the real
+                      % plant.  
     
     % retrive results from the solution
     for m = 1:M
-       AV_velocities(:,m) = full(sol.x((N+1)*M+1+(N+1)*(m-1):(N+1)*m+(N+1)*M));
+       AV_vel(:,m) = full(sol.x((N+1)*M+1+(N+1)*(m-1):(N+1)*m+(N+1)*M));
        AV_accel(:,m) = full(sol.x((N+1)*2*M+1+(N)*(m-1):(N)*m+(N+1)*2*M));
     end
+
+    % MPC cost J
+    J = 0; % cost function
+    % lead vehicle tracking cost
+    J = J + Q*(v_ref(1)-AV_vel(1,1))^2;
+    % follower tracking costs
+    for m = 2:M
+        J = J + Q*(AV_vel(1,m)-AV_vel(1,m-1))^2;
+    end
+    % acceleration cost
+    % lead vehicle tracking cost
+    J = J + R*(AV_accel(1,1))^2;
+    % follower tracking costs
+    for m = 2:M
+        J = J + R*(AV_accel(1,m))^2;
+    end
+    
+    mpc_cost(k+1, :) = J;
 
     t(k+1) = t0;
 
@@ -120,24 +144,6 @@ while k < TIME
     v0_h = full(v0_h);
     v0_h_gp = full(v0_h_gp);
     p0_h_gp = full(p0_h_gp);
-
-    % MPC cost JJ
-    JJ = 0; % cost function
-    % lead vehicle tracking cost
-    JJ = JJ + Q*(v_ref(1)-v0(1,1))^2;
-    % follower tracking costs
-    for m = 2:M
-        JJ = JJ + Q*(v0(1,m)-v0(1,m-1))^2;
-    end
-    % acceleration cost
-    % lead vehicle tracking cost
-    JJ = JJ + R*(AV_accel(1,1))^2;
-    % follower tracking costs
-    for m = 2:M
-        JJ = JJ + R*(AV_accel(1,m))^2;
-    end
-    
-    MPC_cost(k+1, :) = JJ;
 
     % save variable history 
     vv0(k+2, :) = v0;
@@ -160,7 +166,8 @@ H_velocities = vv0_h;
 H_velocities_gp = vv0_h_gp;
 t = [t; t(end)+dt];
 %% Plot 
-v_reference = 20*ones(length(t),1); % vref for lead vehicle
+v_reference(1:floor(length(t)/2)) = 20; 
+v_reference(ceil(length(t)/2):length(t)) = 10;
 
 subplot(411) %plot velocities
 plot(t,v_reference,'k--');hold on;grid on;

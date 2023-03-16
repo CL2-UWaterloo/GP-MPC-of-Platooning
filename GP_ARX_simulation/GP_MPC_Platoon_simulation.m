@@ -5,6 +5,7 @@ N = 10;  % MPC Horizon
 dt = 0.1;   % sample time
 M = 2; % No of autonomous vehicles
  
+% constraints, https://copradar.com/chapts/references/acceleration.html
 a_max = 5;  % max accl, Top of the line production muscle cars is 0.55 g.
 a_min = -5; % min accl, 0.7 g is the Vehicle Max, 0.47 g is the Average Driver Max
 v_max = 35;  % max vel, 126km/h
@@ -39,20 +40,22 @@ v_h_m4 = 0;
 
 Q = 5; % MPC weight for velocity tracking 
 R = 10; % weight for control 
-prob_desired = 0.95; % 2\sigma
+% prob_desired = 0.95; % desired probability for tighenting distance constraint
+prob_desired = 0.95; % 3\sigma
 
 %% Simulation 
-sim_tim = 1; % simulation time
+sim_tim = 30; % simulation time
 
 t0 = 0; % initial time step
 TIME = sim_tim / dt; % simualtion steps
+
+ET = zeros(TIME, 1); % mpc runing time
+
 t = zeros(M, 1);
 t(1) = t0;
 
 k = 0;  % system simulation time step k
 av_accel = zeros(TIME,M); % accelerations hisotry from MPC
-h_pos_sigma = zeros(TIME, 1);
-
 vv0 = [v0;zeros(TIME,M)]; % velocity history of AVs
 vv0_h = [v0_h;zeros(TIME-1,1)]; % velocity history of HV for ARX norminal model updates
 vv0_h_gp = [v0_h;zeros(TIME-1,1)]; % velocity history of HV with GP corrections
@@ -62,12 +65,11 @@ pp0_h = [p0_h;zeros(TIME,1)]; % position history of HV with ARX norminal model
 pp0_h_gp = [p0_h;zeros(TIME,1)]; % position history of HV with ARX + GP
 pp0_h_sigma = [p0_h_sigma;zeros(TIME,1)]; % position variance history of HV 
 
-MPC_cost = zeros(TIME,1); % all mpc cost JJ
+mpc_cost = zeros(TIME,1); % all mpc cost J
 
 AV_accel = zeros(N,M); % MPC acceleration output
 AV_vel = zeros(N+1,M);
-% H_velocities = zeros(N+1,1);
-H_positions_sigma = zeros(N+1, 1);
+
 humanvar_offset = (N)*M+(N+1)*2*M; % the first these many variables are for the AVs: N*M for accel and (N+1)*M for vel and pos each
 
 while k < TIME
@@ -89,12 +91,12 @@ while k < TIME
     end
 
     % MPC
+    tic
     [sol] = GP_MPC_platoon(dt, N, M, v_ref, delta, Q, R, ...
                            v_min, v_max, a_max, a_min, ...
                            p0, v0, v0_h_gp, p0_h_gp, p0_h_sigma, prob_desired,...
                            lbvM_, ubvM_, lbvh_, ubvh_);
-    
-%     sigma = full(sigma);
+   
 
     % update the history for next time steps
     % update k-2, k-3, k-4 
@@ -110,13 +112,43 @@ while k < TIME
     % for k-1 assign the current vel to v_M_m1 for the next iteration
     v_M_m1 = v0(end); % for last AV in platoon
     v_h_m1 = v0_h_gp; % v0_h_gp is the actual "measured" states from the plant
+                      % we use the arx+gp model to represent the real plant
+                      % behaviors. The model propagations must be handled
+                      % by the arx model, gp is the corrections to make
+                      % the whole system model more accurate to the real
+                      % plant.  
     
     % retrive results from the solution
     for m = 1:M
-%        AV_positions(:,m) = full(sol.x(1+(N+1)*(m-1):(N+1)*m));
        AV_vel(:,m) = full(sol.x((N+1)*M+1+(N+1)*(m-1):(N+1)*m+(N+1)*M));
        AV_accel(:,m) = full(sol.x((N+1)*2*M+1+(N)*(m-1):(N)*m+(N+1)*2*M));
     end
+
+    t(k+1) = t0;
+
+    toc
+    ET(k+1) = toc;
+
+
+%     H_positions_sigma = full(sol.x(end-N:end)); 
+    
+    % MPC cost J
+    J = 0; % cost function
+    % lead vehicle tracking cost
+    J = J + Q*(v_ref(1)-AV_vel(1,1))^2;
+    % follower tracking costs
+    for m = 2:M
+        J = J + Q*(AV_vel(1,m)-AV_vel(1,m-1))^2;
+    end
+    % acceleration cost
+    % lead vehicle tracking cost
+    J = J + R*(AV_accel(1,1))^2;
+    % follower tracking costs
+    for m = 2:M
+        J = J + R*(AV_accel(1,m))^2;
+    end
+    
+    mpc_cost(k+1, :) = J;
 
     t(k+1) = t0;
 
@@ -126,24 +158,6 @@ while k < TIME
     v0_h = full(v0_h);
     v0_h_gp = full(v0_h_gp);
     p0_h_gp = full(p0_h_gp);
-
-    % MPC cost JJ
-    JJ = 0; % cost function
-    % lead vehicle tracking cost
-    JJ = JJ + Q*(v_ref(1)-v0(1,1))^2;
-    % follower tracking costs
-    for m = 2:M
-        JJ = JJ + Q*(v0(1,m)-v0(1,m-1))^2;
-    end
-    % acceleration cost
-    % lead vehicle tracking cost
-    JJ = JJ + R*(AV_accel(1,1))^2;
-    % follower tracking costs
-    for m = 2:M
-        JJ = JJ + R*(AV_accel(1,m))^2;
-    end
-    
-    MPC_cost(k+1, :) = JJ;
 
     % save variable history 
     vv0(k+2, :) = v0;
@@ -158,6 +172,17 @@ while k < TIME
     k = k + 1;
 end
 
+%% retrive variance 
+load gpr_medium;
+gp_sigma = zeros(TIME, 1);
+
+i = 1;  % system simulation time step k
+while i < TIME+1
+    [~,sigma,~] = predict(gpr_medium, [vv0_h(i,:),vv0(i+1,M)]);
+    gp_sigma(i, :) = sigma;
+    i = i+1;
+end
+
 %% Reconstruct stuff from solver
 AV_positions = pp0;
 AV_velocities = vv0;
@@ -170,7 +195,7 @@ H_velocities_gp = vv0_h_gp;
 t = [t; t(end)+dt];
 %% Plot 
 v_reference(1:floor(length(t)/2)) = 20; 
-v_reference(ceil(length(t)/2):length(t)) = 10;
+v_reference(ceil(length(t)/2):length(t)) = 20;
 subplot(411) %plot velocities
 plot(t,v_reference,'k--');hold on;grid on;
 plot(t,AV_velocities(:,1),'b', 'LineWidth',1.5); hold on;grid on;
@@ -179,8 +204,10 @@ for m = 2:M
 end
 % plot(t(1:length(t)-1),H_velocities,'c--');hold on;grid on;
 plot(t(1:length(t)-1),H_velocities_gp,'g','LineWidth',1.5);hold on;grid on;
+patch([t(1:length(t)-1);flipud(t(1:length(t)-1))],[H_velocities_gp+2*gp_sigma;flipud(H_velocities_gp-2*gp_sigma)],'b','FaceAlpha',0.1); % Prediction intervals
 
-legend(["velocity ref", "leading AV velocity", "AVs velocity","arx+GP HV vel"],'Location','best');
+legend(["velocity ref", "leading AV velocity", "AVs velocity","arx+GP HV vel", "2 \sigma", ],'Location','best');
+
 xlabel('Time steps');ylabel('Velocities');
 xlim([0 t(end)])
 

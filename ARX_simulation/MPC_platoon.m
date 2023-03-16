@@ -3,13 +3,14 @@ function [sol] = MPC_platoon(dt, N, M, v_ref, delta, Q, R, ...
                             p0, v0, v0_h, p0_h,...
                             lbvM_, ubvM_, lbvh_, ubvh_)
 
+%     addpath('C:\Users\JWang\Desktop\Dropbox\Dropbox_share\A_Waterloo\Projects\Human_inloop_Platooning\HILPlatooning-main\MPC\casadi-windows-matlabR2016a-v3.5.5')
     addpath('/home/jwang/Docs/Casadi/casadi-linux-matlabR2014b-v3.5.5')
     import casadi.*
 
     % ARX difference model parameters
     a1 = -3.0227; a2 = 3.3543; a3 = -1.6329; a4 = 0.3014; 
     b1 = 0.0063; b2 = -0.0303; b3 = 0.0495; b4 = -0.0254;
-        
+
     % variables
     v = MX.sym('v',N+1,M); % vel of AVs
     p = MX.sym('p',N+1,M); % pos of AVs

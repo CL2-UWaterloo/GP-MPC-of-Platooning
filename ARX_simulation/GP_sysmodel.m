@@ -2,7 +2,10 @@ function [t0, p0, v0, v0_h, v0_h_gp, p0_h_gp] = GP_sysmodel(dt, k, t0, p0, vv0, 
 
     a = accel(1,:);
 
+%     addpath('/home/jiewang/Downloads/casadi-linux-matlabR2014b-v3.5.5')
+%     addpath('C:\Users\JWang\Desktop\Dropbox\Dropbox_share\A_Waterloo\Projects\Human_inloop_Platooning\HILPlatooning-main\MPC\casadi-windows-matlabR2016a-v3.5.5')
     addpath('/home/jwang/Docs/Casadi/casadi-linux-matlabR2014b-v3.5.5')
+
     import casadi.*
 
     gp_model = gpCallback('model');
@@ -41,29 +44,33 @@ function [t0, p0, v0, v0_h, v0_h_gp, p0_h_gp] = GP_sysmodel(dt, k, t0, p0, vv0, 
     end
     if (k==2)      
         xk = [vv0_h_gp(k-1), vv0(k-1,M)];
-        [gp_pred{1}, ~] = gp_model(xk);
+        [gp_pred{1}, gp_pred{2}] = gp_model(xk);
         mean = gp_pred{1};
+        sigma = gp_pred{2};
 
         v0_h_gp = v0_h + mean;
     end
     if (k==3) 
         xk = [vv0_h_gp(k-1), vv0(k-1,M)];
-        [gp_pred{1}, ~] = gp_model(xk);
+        [gp_pred{1}, gp_pred{2}] = gp_model(xk);
         mean = gp_pred{1};
+        sigma = gp_pred{2};
 
         v0_h_gp = v0_h + mean;
     end
     if (k==4) 
         xk = [vv0_h_gp(k-1), vv0(k-1,M)];
-        [gp_pred{1}, ~] = gp_model(xk);
+        [gp_pred{1}, gp_pred{2}] = gp_model(xk);
         mean = gp_pred{1};
+        sigma = gp_pred{2};
 
         v0_h_gp = v0_h + mean;
     end
     if(k>4)
         xk = [vv0_h_gp(k-1), vv0(k-1,M)];
-        [gp_pred{1}, ~] = gp_model(xk);
+        [gp_pred{1}, gp_pred{2}] = gp_model(xk);
         mean = gp_pred{1};
+        sigma = gp_pred{2};
 
         v0_h_gp = v0_h + mean;
     end
