@@ -32,8 +32,12 @@ v = G1_logdata1_YN_u;
 G1_logdata1_YN_y = zeros(N_logdata1_YN-1, 1);   
 vh = G1_logdata1_YN_y; 
 
-a1 = -2.6555; a2 = 2.4769; a3 = -0.9740; a4 = 0.1529; 
-b1 = -0.0001; b2 = -0.0066; b3 = 0.0283; b4 = -0.0213;
+% ARX difference model parameters
+a1 = -3.0227; a2 = 3.3543; a3 = -1.6329; a4 = 0.3014; 
+b1 = 0.0063; b2 = -0.0303; b3 = 0.0495; b4 = -0.0254;
+% a1 = -2.6555; a2 = 2.4769; a3 = -0.9740; a4 = 0.1529; 
+% b1 = -0.0001; b2 = -0.0066; b3 = 0.0283; b4 = -0.0213;
+
 v0_h = 0;
 
 vM_ = zeros(4,1);   % we give these value to zero for simplicity but they don't have to be zeros. 
